@@ -21,6 +21,7 @@ struct ChannelVideo
   property live_now : Bool = false
   property premiere_timestamp : Time? = nil
   property views : Int64? = nil
+  property is_short : Bool = false
 
   def to_json(locale, json : JSON::Builder)
     json.object do
@@ -239,6 +240,7 @@ def fetch_channel(ucid, pull_all_videos : Bool)
       live_now:           live_now,
       premiere_timestamp: premiere_timestamp,
       views:              views,
+      is_short:           channel_video.try &.is_short || false,
     })
 
     LOGGER.trace("fetch_channel: #{ucid} : video #{video_id} : Updating or inserting video")
@@ -249,7 +251,9 @@ def fetch_channel(ucid, pull_all_videos : Bool)
 
     if was_insert
       LOGGER.trace("fetch_channel: #{ucid} : video #{video_id} : Inserted, updating subscriptions")
-      NOTIFICATION_CHANNEL.send(VideoNotification.from_video(video))
+      if !video.is_short
+        NOTIFICATION_CHANNEL.send(VideoNotification.from_video(video))
+      end
     else
       LOGGER.trace("fetch_channel: #{ucid} : video #{video_id} : Updated")
     end
@@ -274,13 +278,14 @@ def fetch_channel(ucid, pull_all_videos : Bool)
           live_now:           video.badges.live_now?,
           premiere_timestamp: video.premiere_timestamp,
           views:              video.views,
+          is_short:           video.is_short,
         })
 
         # We are notified of Red videos elsewhere (PubSub), which includes a correct published date,
         # so since they don't provide a published date here we can safely ignore them.
         if Time.utc - video.published > 1.minute
           was_insert = Invidious::Database::ChannelVideos.insert(video)
-          if was_insert
+          if was_insert && !video.is_short
             NOTIFICATION_CHANNEL.send(VideoNotification.from_video(video))
           end
         end

@@ -190,6 +190,7 @@ module Invidious::Routes::Feeds
         author_verified:    false,
         author_thumbnail:   nil,
         badges:             VideoBadges::None,
+        is_short:           false,
       })
     end
 
@@ -443,6 +444,7 @@ module Invidious::Routes::Feeds
           live_now:           video.live_now,
           premiere_timestamp: video.premiere_timestamp,
           views:              video.views,
+          is_short:           false,
         })
 
         was_insert = Invidious::Database::ChannelVideos.insert(video, with_premiere_timestamp: true)

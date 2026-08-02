@@ -34,8 +34,12 @@ class Invidious::Jobs::RefreshFeedsJob < Invidious::Jobs::BaseJob
                 end
               end
 
-              if !db.query_one("SELECT pg_get_viewdef('#{view_name}')", as: String).includes? "WHERE ((cv.ucid = ANY (u.subscriptions))"
+              view_def = db.query_one("SELECT pg_get_viewdef('#{view_name}')", as: String)
+              if !view_def.includes?("WHERE ((cv.ucid = ANY (u.subscriptions))")
                 LOGGER.info("RefreshFeedsJob: Materialized view #{view_name} is out-of-date, recreating...")
+                db.exec("DROP MATERIALIZED VIEW #{view_name}")
+              elsif !view_def.includes?("is_short")
+                LOGGER.info("RefreshFeedsJob: Materialized view #{view_name} is missing is_short filter, recreating...")
                 db.exec("DROP MATERIALIZED VIEW #{view_name}")
               end
 

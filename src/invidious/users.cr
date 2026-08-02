@@ -1,7 +1,7 @@
 require "crypto/bcrypt/password"
 
 # Materialized views may not be defined using bound parameters (`$1` as used elsewhere)
-MATERIALIZED_VIEW_SQL = ->(email : String) { "SELECT cv.* FROM channel_videos cv WHERE EXISTS (SELECT subscriptions FROM users u WHERE cv.ucid = ANY (u.subscriptions) AND u.email = E'#{email.gsub({'\'' => "\\'", '\\' => "\\\\"})}') ORDER BY published DESC" }
+MATERIALIZED_VIEW_SQL = ->(email : String) { "SELECT cv.* FROM channel_videos cv WHERE EXISTS (SELECT subscriptions FROM users u WHERE cv.ucid = ANY (u.subscriptions) AND u.email = E'#{email.gsub({'\'' => "\\'", '\\' => "\\\\"})}') AND cv.is_short = false ORDER BY published DESC" }
 
 def create_user(sid, email, password)
   password = Crypto::Bcrypt::Password.create(password, cost: 10)
@@ -32,6 +32,7 @@ def get_subscription_feed(user, max_results = 40, page = 1)
   if user.preferences.notifications_only && !notifications.empty?
     # Only show notifications
     notifications = Invidious::Database::ChannelVideos.select(notifications)
+    notifications.reject!(&.is_short)
     videos = [] of ChannelVideo
 
     notifications.sort_by!(&.published).reverse!
@@ -58,11 +59,11 @@ def get_subscription_feed(user, max_results = 40, page = 1)
         else
           values = "VALUES #{user.watched.map { |id| %(('#{id}')) }.join(",")}"
         end
-        videos = PG_DB.query_all("SELECT DISTINCT ON (ucid) * FROM #{view_name} WHERE NOT id = ANY (#{values}) ORDER BY ucid, published DESC", as: ChannelVideo)
+        videos = PG_DB.query_all("SELECT DISTINCT ON (ucid) * FROM #{view_name} WHERE length_seconds > 60 AND NOT id = ANY (#{values}) ORDER BY ucid, published DESC", as: ChannelVideo)
       else
         # Show latest video from each channel
 
-        videos = PG_DB.query_all("SELECT DISTINCT ON (ucid) * FROM #{view_name} ORDER BY ucid, published DESC", as: ChannelVideo)
+        videos = PG_DB.query_all("SELECT DISTINCT ON (ucid) * FROM #{view_name} WHERE length_seconds > 60 ORDER BY ucid, published DESC", as: ChannelVideo)
       end
 
       videos.sort_by!(&.published).reverse!
@@ -75,11 +76,11 @@ def get_subscription_feed(user, max_results = 40, page = 1)
         else
           values = "VALUES #{user.watched.map { |id| %(('#{id}')) }.join(",")}"
         end
-        videos = PG_DB.query_all("SELECT * FROM #{view_name} WHERE NOT id = ANY (#{values}) ORDER BY published DESC LIMIT $1 OFFSET $2", limit, offset, as: ChannelVideo)
+        videos = PG_DB.query_all("SELECT * FROM #{view_name} WHERE length_seconds > 60 AND NOT id = ANY (#{values}) ORDER BY published DESC LIMIT $1 OFFSET $2", limit, offset, as: ChannelVideo)
       else
         # Sort subscriptions as normal
 
-        videos = PG_DB.query_all("SELECT * FROM #{view_name} ORDER BY published DESC LIMIT $1 OFFSET $2", limit, offset, as: ChannelVideo)
+        videos = PG_DB.query_all("SELECT * FROM #{view_name} WHERE length_seconds > 60 ORDER BY published DESC LIMIT $1 OFFSET $2", limit, offset, as: ChannelVideo)
       end
     end
 

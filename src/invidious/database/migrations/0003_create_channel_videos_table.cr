@@ -16,6 +16,7 @@ module Invidious::Database::Migrations
         live_now boolean,
         premiere_timestamp timestamp with time zone,
         views bigint,
+        is_short boolean,
         CONSTRAINT channel_videos_id_key UNIQUE (id)
       );
       SQL
